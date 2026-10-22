@@ -124,6 +124,10 @@ jobs:
             bash make.sh all-library
 
             bash make.sh config
+            # Confirm PHP will register the Protobuf static module before compiling.
+            test -f ext/protobuf/php_protobuf.h
+            grep -q 'phpext_protobuf_ptr' ext/protobuf/php_protobuf.h
+            grep -q '#include "ext/protobuf/php_protobuf.h"' main/internal_functions_cli.c
             bash make.sh build
             bash make.sh archive
 
@@ -133,6 +137,15 @@ jobs:
               bash sapi/scripts/package-php-runtime-layer.sh linux-x64
             ls -lh libs/libphp.a
             ls -lh runtime-layer/*.tar.xz*
+
+      # actions/cache normally does not save a cache when compilation fails.
+      # Keep completed third-party libraries so the next run need not rebuild them.
+      - name: Cache compiled libraries on failure
+        if: ${{ failure() && steps.all-library-cache-x86_64.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: /usr/local/swoole-cli
+          key: all-library-${{ runner.os }}-x86_64-${{ hashFiles('sapi/PHP-VERSION.conf', 'sapi/SWOOLE-VERSION.conf') }}
 
       - name: Start Database
         run: |

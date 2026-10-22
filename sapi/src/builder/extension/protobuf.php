@@ -28,6 +28,18 @@ EOF;
                 sed -i 's/arginfo_void,/arginfo_void_protobuf,/g' ext/protobuf/*.c ext/protobuf/*.h ext/protobuf/*.inc
 EOF;
         }
+        // PHP's genif.sh detects static extensions through phpext_* macros in headers.
+        // Protobuf 3.21.6 defines the module entry but does not declare that macro.
+        $cmd .= <<<'PROTOBUF_REGISTRATION'
+cat > ext/protobuf/php_protobuf.h <<'PROTOBUF_STATIC_HEADER'
+#ifndef PHP_PROTOBUF_STATIC_H
+#define PHP_PROTOBUF_STATIC_H
+#include "php.h"
+extern zend_module_entry protobuf_module_entry;
+#define phpext_protobuf_ptr (&protobuf_module_entry)
+#endif
+PROTOBUF_STATIC_HEADER
+PROTOBUF_REGISTRATION;
         return $cmd;
     });
 };

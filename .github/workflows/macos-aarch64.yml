@@ -1,6 +1,6 @@
 name: build-swoole-cli-macos-aarch64
 
-on: [ push, pull_request ]
+on: [ push, pull_request, workflow_dispatch ]
 
 jobs:
   macos-aarch64:
@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v5
         id: php-runtime-cache
         with:
-          path: ${{ github.workspace }}/runtime
+          path: ${{ github.workspace }}/var/runtime
           key: ${{ runner.os }}-aarch64-php-runtime
 
       - name: Cache PHP Vendor
@@ -90,9 +90,8 @@ jobs:
           mkdir -p pool/lib
           mkdir -p pool/ext
           mkdir -p bin/
-          mkdir -p runtime/
-          if [ -f runtime/php ]; then rm -f runtime/php; fi
-          if [ ! -f runtime/php/box ] ; then
+          mkdir -p var/runtime/
+          if [ ! -f var/runtime/php/box ] ; then
               bash  setup-php-runtime.sh
           fi
           bash sapi/download-box/download-box-get-archive-from-server.sh
@@ -101,23 +100,33 @@ jobs:
 
       - name: prepare
         run: |
-          export PATH=${{ github.workspace }}/runtime/php/:$PATH
-          alias php="php -d curl.cainfo=${{ github.workspace }}/runtime/php/cacert.pem -d openssl.cafile=${{ github.workspace }}/runtime/php/cacert.pem"
+          export PATH=${{ github.workspace }}/var/runtime/php/:$PATH
+          alias php="php -d curl.cainfo=${{ github.workspace }}/var/runtime/php/cacert.pem -d openssl.cafile=${{ github.workspace }}/var/runtime/php/cacert.pem"
 
           composer install  --no-interaction --no-autoloader --no-scripts --profile
           composer dump-autoload --optimize --profile
 
-          php prepare.php --without-docker=1 --with-libavif
+          php prepare.php --without-docker=1 --with-libavif +protobuf +xlswriter
 
       - name: Build
         run: |
-          export PATH=${{ github.workspace }}/runtime/php/:$PATH
+          export PATH=${{ github.workspace }}/var/runtime/php/:$PATH
 
           bash make.sh all-library
 
           bash make.sh config
+          test -f ext/protobuf/php_protobuf.h
+          grep -q 'phpext_protobuf_ptr' ext/protobuf/php_protobuf.h
+          grep -q '#include "ext/protobuf/php_protobuf.h"' main/internal_functions_cli.c
           bash make.sh build
           bash make.sh archive
+
+      - name: Cache compiled libraries on failure
+        if: ${{ failure() && steps.all-library-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: /usr/local/swoole-cli
+          key: all-library-${{ runner.os }}-aarch64-${{ hashFiles('sapi/PHP-VERSION.conf', 'sapi/SWOOLE-VERSION.conf') }}
 
       - name: Show Build Result
         run: |
@@ -134,6 +143,20 @@ jobs:
           ./bin/swoole-cli -r "echo PHP_VERSION;"
           ./bin/swoole-cli ./vendor/bin/phpunit ./sapi/src/UnitTest/MainTest.php  --list-tests
           ./bin/swoole-cli ./vendor/bin/phpunit ./sapi/src/UnitTest/MainTest.php
+
+      - name: Verify Required Extensions
+        run: |
+          ./bin/swoole-cli --ri protobuf
+          ./bin/swoole-cli --ri xlswriter
+          ./bin/swoole-cli -r '
+            foreach (["protobuf", "xlswriter"] as $ext) {
+                if (!extension_loaded($ext)) {
+                    fwrite(STDERR, "Missing extension: {$ext}\\n");
+                    exit(1);
+                }
+            }
+            echo "Required extensions OK\\n";
+          '
 
       - name: Archive production artifacts debug
         uses: actions/upload-artifact@v5
