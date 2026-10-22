@@ -1,6 +1,6 @@
 name: build-swoole-cli-linux-x86_64
 
-on: [ push, pull_request ]
+on: [ push, pull_request, workflow_dispatch ]
 
 jobs:
   linux-x86_64:
@@ -120,7 +120,7 @@ jobs:
             composer install  --no-interaction --no-autoloader --no-scripts --profile
             composer dump-autoload --optimize --profile
 
-            php prepare.php --with-libavif --with-static-pie
+            php prepare.php --with-libavif --with-static-pie +protobuf +xlswriter
 
             bash make.sh all-library
 
@@ -158,6 +158,20 @@ jobs:
           ./bin/swoole-cli -r "echo PHP_VERSION;"
           ./bin/swoole-cli ./vendor/bin/phpunit ./sapi/src/UnitTest/MainTest.php  --list-tests
           ./bin/swoole-cli ./vendor/bin/phpunit ./sapi/src/UnitTest/MainTest.php
+
+      - name: Verify Required Extensions
+        run: |
+          ./bin/swoole-cli --ri protobuf
+          ./bin/swoole-cli --ri xlswriter
+          ./bin/swoole-cli -r '
+            foreach (["protobuf", "xlswriter"] as $ext) {
+                if (!extension_loaded($ext)) {
+                    fwrite(STDERR, "Missing extension: {$ext}\\n");
+                    exit(1);
+                }
+            }
+            echo "Required extensions OK\\n";
+          '
 
       - name: production artifacts debug
         uses: actions/upload-artifact@v5
