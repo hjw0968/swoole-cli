@@ -27,8 +27,8 @@ gh workflow run macos-aarch64.yml -R "$repo" --ref "$branch"
 get_run() {
   local wf="$1"
   gh run list -R "$repo" -w "$wf" -b "$branch" -c "$candidate" -L 50 \
-      --json databaseId,status,conclusion,headSha \
-      --jq '[.[] | select(.headSha == "$candidate")] | first | .databaseId // empty'
+      --json databaseId,status,conclusion,headSha | \
+      jq -r --arg sha "$candidate" '[.[] | select(.headSha == $sha)] | first | .databaseId // empty'
 }
 wait_run() {
   local wf="$1" run="" status="" outcome=""
