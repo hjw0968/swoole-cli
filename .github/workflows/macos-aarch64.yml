@@ -155,6 +155,10 @@ jobs:
                     exit(1);
                 }
             }
+            if (phpversion("protobuf") !== "5.36.2" || phpversion("xlswriter") !== "3.0.0") {
+                fwrite(STDERR, "Unexpected PECL extension versions\\n");
+                exit(1);
+            }
             echo "Required extensions OK\\n";
           '
 

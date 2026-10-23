@@ -7,8 +7,8 @@ return function (Preprocessor $p) {
     $p->addExtension(
         (new Extension('protobuf'))
             ->withOptions('--enable-protobuf')
-            ->withPeclVersion('3.25.5')
-            ->withFileHash('sha256', '5ee38f25baf789fbe71c55decbdb7ea250eae0e5f61910e3e9180794aa38d185')
+            ->withPeclVersion('5.36.2')
+            ->withFileHash('sha256', 'f0a17c67de29df0fb0e5215a381df9b155125e1ace6252dd617bf16b4194dd5b')
             ->withHomePage('https://developers.google.com/protocol-buffers')
             ->withManual('https://protobuf.dev/reference/php/php-generated/')
     );
