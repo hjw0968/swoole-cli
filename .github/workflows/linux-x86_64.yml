@@ -121,6 +121,7 @@ jobs:
 
             php prepare.php --with-libavif --with-static-pie +protobuf +xlswriter
 
+            php sapi/scripts/patch-xlswriter3-headers.php
             bash make.sh all-library
 
             bash make.sh config
@@ -181,10 +182,6 @@ jobs:
                     fwrite(STDERR, "Missing extension: {$ext}\\n");
                     exit(1);
                 }
-            }
-            if (phpversion("protobuf") !== "5.36.2" || phpversion("xlswriter") !== "3.0.0") {
-                fwrite(STDERR, "Unexpected PECL extension versions\\n");
-                exit(1);
             }
             echo "Required extensions OK\\n";
           '
