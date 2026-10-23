@@ -108,6 +108,9 @@ jobs:
 
           php prepare.php --without-docker=1 --with-libavif +protobuf +xlswriter
 
+      - name: Fix bundled xlswriter minizip C prototypes
+        run: python3 sapi/scripts/patch-xlswriter-macos.py
+
       - name: Build
         run: |
           export PATH=${{ github.workspace }}/var/runtime/php/:$PATH
