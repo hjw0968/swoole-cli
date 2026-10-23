@@ -225,3 +225,17 @@ jobs:
           OSS_REGION: ${{ vars.QCLOUD_OSS_REGION }}
         run: |
           bash sapi/scripts/tencent-cloud-object-storage.sh --upload-file ${{ github.workspace }}/swoole-cli-v${{ env.APP_VERSION }}-linux-x64.tar.xz
+
+  pecl-check:
+    if: ${{ contains(github.event.head_commit.message, '[pecl-check]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute PECL archive hashes
+        run: |
+          set -euo pipefail
+          for archive in protobuf-3.25.5 xlswriter-1.5.8; do
+            curl --fail --location --retry 3 -o "${archive}.tgz" "https://pecl.php.net/get/${archive}.tgz"
+            test -s "${archive}.tgz"
+            md5sum "${archive}.tgz"
+            sha256sum "${archive}.tgz"
+          done
