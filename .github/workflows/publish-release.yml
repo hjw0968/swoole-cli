@@ -1,0 +1,46 @@
+name: Publish verified binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      linux_run_id:
+        description: "Verified Linux workflow run ID (optional)"
+        required: false
+        type: string
+      macos_run_id:
+        description: "Verified macOS workflow run ID (optional)"
+        required: false
+        type: string
+      release_tag:
+        description: "Optional first release tag"
+        required: false
+        type: string
+  workflow_run:
+    workflows:
+      - build-swoole-cli-linux-x86_64
+      - build-swoole-cli-macos-aarch64
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish release from already verified binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINUX_RUN_ID: ${{ inputs.linux_run_id }}
+          MACOS_RUN_ID: ${{ inputs.macos_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: bash .github/scripts/publish-verified-release.sh
