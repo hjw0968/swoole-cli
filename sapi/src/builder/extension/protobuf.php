@@ -19,13 +19,13 @@ return function (Preprocessor $p) {
         if ($p->isMacos()) {
             $cmd = <<<EOF
                 cd {$workdir}
-                sed -i '.bak' 's/arginfo_void,/arginfo_void_protobuf,/g' ext/protobuf/*.c ext/protobuf/*.h ext/protobuf/*.inc
-                find ext/protobuf/ -name \*.bak | xargs rm -f
+                find ext/protobuf -type f \( -name '*.c' -o -name '*.h' -o -name '*.inc' \) -exec sed -i '.bak' 's/arginfo_void,/arginfo_void_protobuf,/g' {} +
+                find ext/protobuf -type f -name '*.bak' -delete
 EOF;
         } else {
             $cmd = <<<EOF
                 cd {$workdir}
-                sed -i 's/arginfo_void,/arginfo_void_protobuf,/g' ext/protobuf/*.c ext/protobuf/*.h ext/protobuf/*.inc
+                find ext/protobuf -type f \( -name '*.c' -o -name '*.h' -o -name '*.inc' \) -exec sed -i 's/arginfo_void,/arginfo_void_protobuf,/g' {} +
 EOF;
         }
         // PECL may omit php_protobuf.h, which genif.sh needs for static registration.
