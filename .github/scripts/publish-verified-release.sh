@@ -28,7 +28,8 @@ if [[ -n "${LINUX_RUN_ID:-}" || -n "${MACOS_RUN_ID:-}" ]]; then
   macos_id="$MACOS_RUN_ID"
   sha="$(verified_run "$linux_id")"
   [[ "$(verified_run "$macos_id")" == "$sha" ]] || { echo "::error::Builds have different commit IDs"; exit 1; }
-  git fetch --quiet --depth=100 origin main
+  git fetch --quiet origin main
+  main_sha="$(git rev-parse FETCH_HEAD)"
   git merge-base --is-ancestor "$sha" "$main_sha" || { echo "::error::Build commit is not on main"; exit 1; }
 else
   [[ "${EVENT_NAME:-}" == "workflow_run" ]] || { echo "::error::Specify both run IDs for manual release"; exit 1; }
