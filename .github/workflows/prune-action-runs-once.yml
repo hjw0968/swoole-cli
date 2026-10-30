@@ -53,7 +53,16 @@ jobs:
             esac
             [[ "$remove" == "1" ]] || continue
             echo "Deleting old $conclusion $name run $run_id"
-            if gh api -X DELETE "repos/$repo/actions/runs/$run_id" >/dev/null; then
+            succeeded=0
+            for attempt in 1 2 3 4 5; do
+              if gh api -X DELETE "repos/$repo/actions/runs/$run_id" >/dev/null 2>&1; then
+                succeeded=1
+                break
+              fi
+              echo "::warning::Retrying run $run_id after transient GitHub API error"
+              sleep "$((attempt * 3))"
+            done
+            if ((succeeded == 1)); then
               ((deleted+=1))
             else
               echo "::warning::Unable to delete run $run_id"
@@ -73,4 +82,8 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git rm -- .github/workflows/prune-action-runs-once.yml
           git commit -m 'chore: remove completed one-time run cleaner --filter=cleanup'
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            sleep "$((attempt * 4))"
+          done
+          exit 1
