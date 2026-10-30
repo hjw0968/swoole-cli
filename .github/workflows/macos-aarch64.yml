@@ -3,8 +3,22 @@ name: build-swoole-cli-macos-aarch64
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/scripts/publish-verified-release.sh'
+      - '.github/scripts/test-release-version-policy.sh'
+      - '.github/scripts/sync-upstream.sh'
+      - '.github/workflows/publish-release.yml'
+      - '.github/workflows/sync-upstream.yml'
+      - '.github/workflows/prune-action-runs-once.yml'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '.github/scripts/publish-verified-release.sh'
+      - '.github/scripts/test-release-version-policy.sh'
+      - '.github/scripts/sync-upstream.sh'
+      - '.github/workflows/publish-release.yml'
+      - '.github/workflows/sync-upstream.yml'
+      - '.github/workflows/prune-action-runs-once.yml'
   workflow_dispatch:
 
 jobs:

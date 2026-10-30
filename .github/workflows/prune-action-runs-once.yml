@@ -1,0 +1,76 @@
+name: One-time cleanup of obsolete Actions run history
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prune-action-runs-once.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  cleanup:
+    if: ${{ github.repository == 'hjw0968/swoole-cli' && contains(github.event.head_commit.message, '--filter=cleanup') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+      - name: Delete completed invalid and redundant publish runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          for tag in v6.2.2-php8.4.25-gaea986c v6.2.4-php8.4.27-g9ae5527; do
+            gh release view "$tag" -R "$repo" >/dev/null
+          done
+
+          # Retain official publication provenance and all successful builds.
+          # Remove failed/cancelled/skipped runs and successful publish
+          # no-ops that are not needed to prove either retained Release.
+          keep_publish='^(41041109636|39917483442|39917474942|39917474459)$'
+          deleted=0
+          failed=0
+          examined=0
+          sleep 12
+          gh api --paginate "repos/$repo/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id, .name, .status, (.conclusion // "")] | @tsv' > /tmp/action-runs-to-prune.tsv
+          while IFS=$'\t' read -r run_id name status conclusion; do
+            ((examined+=1))
+            [[ "$run_id" != "$GITHUB_RUN_ID" ]] || continue
+            [[ "$status" == "completed" ]] || continue
+            remove=0
+            case "$conclusion" in
+              failure|cancelled|skipped|timed_out|startup_failure|action_required)
+                remove=1 ;;
+              success)
+                if [[ "$name" == "Publish verified binaries" && ! "$run_id" =~ $keep_publish ]]; then
+                  remove=1
+                fi ;;
+            esac
+            [[ "$remove" == "1" ]] || continue
+            echo "Deleting old $conclusion $name run $run_id"
+            if gh api -X DELETE "repos/$repo/actions/runs/$run_id" >/dev/null; then
+              ((deleted+=1))
+            else
+              echo "::warning::Unable to delete run $run_id"
+              ((failed+=1))
+            fi
+          done < /tmp/action-runs-to-prune.tsv
+          echo "Examined: $examined; deleted: $deleted; failed: $failed"
+          if (( failed > 0 )); then
+            echo "::error::Some Actions runs could not be deleted"
+            exit 1
+          fi
+      - name: Self-remove one-time cleanup workflow
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm -- .github/workflows/prune-action-runs-once.yml
+          git commit -m 'chore: remove completed one-time run cleaner --filter=cleanup'
+          git push origin HEAD:main
