@@ -1,6 +1,12 @@
 name: Publish verified binaries
 
 on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+    paths:
+      - '.github/scripts/publish-verified-release.sh'
+      - '.github/scripts/test-release-version-policy.sh'
+      - '.github/workflows/publish-release.yml'
   workflow_dispatch:
     inputs:
       linux_run_id:
@@ -26,10 +32,44 @@ permissions:
   actions: read
 
 concurrency:
-  group: release-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: publish-verified-binaries
   cancel-in-progress: false
 
 jobs:
+  verify_release_policy:
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify release policy without publishing
+        run: |
+          bash -n .github/scripts/publish-verified-release.sh
+          bash .github/scripts/test-release-version-policy.sh
+  cleanup_merged_ci_branches:
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Remove only merged ci/* branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          git fetch --quiet origin main
+          branches="$(gh api --paginate "repos/$repo/branches?per_page=100" --jq '.[].name')"
+          while IFS= read -r branch; do
+            [[ "$branch" == ci/* ]] || continue
+            sha="$(gh api "repos/$repo/git/ref/heads/$branch" --jq '.object.sha')"
+            if git merge-base --is-ancestor "$sha" origin/main; then
+              echo "Deleting merged branch: $branch"
+              gh api -X DELETE "repos/$repo/git/refs/heads/$branch" >/dev/null
+            else
+              echo "Preserving unmerged branch: $branch"
+            fi
+          done <<< "$branches"
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
