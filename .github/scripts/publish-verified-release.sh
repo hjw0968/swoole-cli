@@ -50,16 +50,58 @@ fi
 php_version="$(git show "$sha:sapi/PHP-VERSION.conf" | tr -d '[:space:]')"
 swoole_version="$(git show "$sha:sapi/SWOOLE-VERSION.conf" | tr -d '[:space:]')"
 swoole_version="${swoole_version#v}"
+
+# Read extensions from the exact CI-tested commit, not hardcoded values.
+pecl_version() {
+  local extension="$1" version
+  version="$(git show "$sha:sapi/src/builder/extension/${extension}.php" |
+    sed -nE "s/.*withPeclVersion\\('([0-9]+\\.[0-9]+\\.[0-9]+)'\\).*/\\1/p")"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    echo "::error::Unable to read pinned ${extension} PECL version" >&2
+    return 1
+  }
+  printf '%s\n' "$version"
+}
+protobuf_version="$(pecl_version protobuf)"
+xlswriter_version="$(pecl_version xlswriter)"
+
+# Automatic releases are unique by runtime versions, not by commit SHA.
+# Explicit -rN tags permit deliberate manual revisions.
+automatic_tag="v${swoole_version}-php${php_version}-pb${protobuf_version}-xls${xlswriter_version}"
 if [[ -n "${RELEASE_TAG:-}" ]]; then
   tag="$RELEASE_TAG"
-  [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-php[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]] || { echo "::error::Invalid release tag"; exit 1; }
+  [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-php[0-9]+\.[0-9]+\.[0-9]+-r[1-9][0-9]*$ &&
+     "$tag" == "v${swoole_version}-php${php_version}-r"* ]] || {
+    echo "::error::Manual tag must match source PHP/Swoole versions and end with -rN" >&2
+    exit 1
+  }
 else
-  tag="v${swoole_version}-php${php_version}-g${sha:0:7}"
+  tag="$automatic_tag"
 fi
 
 if gh release view "$tag" -R "$repo" >/dev/null 2>&1; then
   echo "Release $tag already exists; no duplicate publication."
   exit 0
+fi
+
+if [[ -z "${RELEASE_TAG:-}" ]]; then
+  # Check legacy -gSHA and -rN releases too; preserve existing versions.
+  # Retrieve the list first so API failures do not silently cause a publish.
+  release_list="$(gh release list -R "$repo" --limit 1000 --json tagName)"
+  while IFS= read -r existing_tag; do
+    [[ "$existing_tag" == "v${swoole_version}-php${php_version}-"* ]] || continue
+    existing_body="$(gh release view "$existing_tag" -R "$repo" --json body --jq '.body')"
+    if ! grep -Fq '| protobuf |' <<<"$existing_body" ||
+       ! grep -Fq '| xlswriter |' <<<"$existing_body"; then
+      echo "::error::Existing release $existing_tag lacks PECL version metadata; refusing possible duplicate" >&2
+      exit 1
+    fi
+    if grep -Fxq "| protobuf | $protobuf_version |" <<<"$existing_body" &&
+       grep -Fxq "| xlswriter | $xlswriter_version |" <<<"$existing_body"; then
+      echo "Release $existing_tag already covers PHP $php_version / Swoole $swoole_version / protobuf $protobuf_version / xlswriter $xlswriter_version; skipping."
+      exit 0
+    fi
+  done < <(jq -r '.[].tagName' <<<"$release_list")
 fi
 
 mkdir -p "$workdir/linux" "$workdir/macos" "$workdir/dist"
@@ -75,8 +117,8 @@ Swoole CLI custom build
 Git commit: $sha
 PHP: $php_version (ZTS)
 Swoole: $swoole_version
-protobuf: 5.36.2
-xlswriter: 3.0.0
+protobuf: $protobuf_version
+xlswriter: $xlswriter_version
 Built and verified using GitHub Actions:
 Linux: https://github.com/$repo/actions/runs/$linux_id
 macOS: https://github.com/$repo/actions/runs/$macos_id
@@ -98,8 +140,8 @@ cat >"$notes" <<EOF
 | --- | --- |
 | PHP | $php_version (ZTS) |
 | Swoole | $swoole_version |
-| protobuf | 5.36.2 |
-| xlswriter | 3.0.0 |
+| protobuf | $protobuf_version |
+| xlswriter | $xlswriter_version |
 | libssh2 / built-in Swoole SSH2 | 1.11.1 / enabled |
 
 ### What we changed
