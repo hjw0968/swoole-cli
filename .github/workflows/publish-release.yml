@@ -1,6 +1,11 @@
 name: Publish verified binaries
 
 on:
+  pull_request:
+    paths:
+      - '.github/scripts/publish-verified-release.sh'
+      - '.github/scripts/test-release-version-policy.sh'
+      - '.github/workflows/publish-release.yml'
   workflow_dispatch:
     inputs:
       linux_run_id:
@@ -30,6 +35,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify_release_policy:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify release policy without publishing
+        run: |
+          bash -n .github/scripts/publish-verified-release.sh
+          bash .github/scripts/test-release-version-policy.sh
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
